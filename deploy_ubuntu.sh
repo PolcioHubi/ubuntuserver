@@ -2,9 +2,8 @@
 
 # ==============================================================================
 # Skrypt do pełnego wdrożenia aplikacji Flask/Gunicorn z Nginx, SSL i Logowaniem
-# WERSJA OSTATECZNA PANCERNA v3 (2025-08-06)
-# Rozwiązuje problem z nagłówkami bezpieczeństwa (HSTS) po modyfikacji przez Certbot
-# poprzez wstrzyknięcie pliku z nagłówkami PO działaniu Certbota.
+# WERSJA OSTATECZNA PANCERNA v4 (2025-08-08)
+# Zaktualizowano Content-Security-Policy, aby zezwolić na skrypty z cdn.jsdelivr.net
 # ==============================================================================
 
 # Zatrzymaj skrypt w przypadku błędu
@@ -17,13 +16,15 @@ DEST_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 DOMAIN="gov-mobywatel.polcio.p5.tiktalik.io"
 SSL_EMAIL="polciovps@atomicmail.io"
 GUNICORN_WORKERS=$((2 * $(nproc) + 1))
-CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self';"
+# POPRAWKA: Dodano https://cdn.jsdelivr.net do zaufanych źródeł skryptów.
+CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self';"
 
 
 echo ">>> START: Rozpoczynanie wdrożenia aplikacji $SERVICE_NAME..."
-# ... (reszta skryptu pozostaje bez zmian aż do KROKU 4.5)
+echo ">>> Katalog aplikacji (uruchomienie z źródła): $DEST_DIR"
+echo ">>> Użyta liczba workerów Gunicorna: $GUNICORN_WORKERS"
 
-# --- KROK 0 do 3 pozostają identyczne ---
+# --- KROK 0: Utworzenie dedykowanego użytkownika (jeśli nie istnieje) ---
 echo ">>> KROK 0: Sprawdzanie i tworzenie użytkownika systemowego $PROJECT_USER..."
 if ! id "$PROJECT_USER" &>/dev/null; then
     sudo useradd -r -s /bin/false $PROJECT_USER
@@ -31,21 +32,33 @@ if ! id "$PROJECT_USER" &>/dev/null; then
 else
     echo "Użytkownik $PROJECT_USER już istnieje."
 fi
+
+# --- KROK 1: Instalacja podstawowych zależności ---
 echo ">>> KROK 1: Instalowanie Nginx, Pip, Venv i Certbota..."
 sudo apt-get update
 sudo apt-get install -y nginx python3-pip python3-venv certbot python3-certbot-nginx redis-server
+
+# Upewnij się, że Redis jest uruchomiony i włączony przy starcie systemu
 echo ">>> Upewnianie się, że Redis jest uruchomiony i włączony..."
 sudo systemctl start redis-server
 sudo systemctl enable redis-server
+
+# --- KROK 1.5: Dodanie użytkownika Nginx do grupy projektu ---
 echo ">>> KROK 1.5: Dodawanie użytkownika www-data do grupy $PROJECT_USER..."
 sudo usermod -aG $PROJECT_USER www-data
-echo ">>> KROK 2: Przygotowanie katalogu aplikacji ..."
+
+# --- KROK 2: Przygotowanie katalogu aplikacji ---
+echo ">>> KROK 2: Ustawianie właściciela katalogu $DEST_DIR..."
 sudo chown -R $PROJECT_USER:$PROJECT_USER $DEST_DIR
+echo ">>> KROK 2.5: Tworzenie katalogu na logi..."
 sudo mkdir -p $DEST_DIR/logs
 sudo chown -R $PROJECT_USER:$PROJECT_USER $DEST_DIR/logs
+echo ">>> KROK 2.6: Ustawianie bezpiecznych uprawnień do plików i folderów..."
 sudo find $DEST_DIR -type d -exec chmod 750 {} \;
 sudo find $DEST_DIR -type f -exec chmod 640 {} \;
 sudo chmod +x $0
+
+# --- KROK 3: Konfiguracja środowiska wirtualnego i zależności ---
 echo ">>> KROK 3: Uruchamianie konfiguracji środowiska Python..."
 sudo -u "$PROJECT_USER" bash -c "
 set -e
@@ -68,6 +81,8 @@ rm -f '$DEST_DIR/auth_data/database.db'
 '$DEST_DIR/venv/bin/flask' --app '$DEST_DIR/wsgi.py' db migrate -m 'Initial deployment migration'
 '$DEST_DIR/venv/bin/flask' --app '$DEST_DIR/wsgi.py' db upgrade
 "
+
+# --- KROK 4: Konfiguracja usługi Systemd dla Gunicorn ---
 echo ">>> KROK 4: Konfiguracja usługi Systemd dla Gunicorn..."
 sudo rm -f /etc/systemd/system/${SERVICE_NAME}.service
 sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
@@ -109,9 +124,7 @@ EOF
 echo ">>> KROK 5: Tworzenie WSTĘPNEJ konfiguracji Nginx dla domeny $DOMAIN (tylko port 80)..."
 sudo rm -f /etc/nginx/sites-available/$SERVICE_NAME
 sudo rm -f /etc/nginx/sites-enabled/$SERVICE_NAME
-
-# Tym razem tworzymy BARDZO prostą konfigurację, bez żadnych nagłówków.
-# Chodzi tylko o to, żeby Certbot ją znalazł i poprawnie zmodyfikował.
+# Tworzymy BARDZO prostą konfigurację, żeby Certbot ją znalazł i poprawnie zmodyfikował.
 sudo tee /etc/nginx/sites-available/$SERVICE_NAME > /dev/null <<EOF
 server {
     listen 80;
@@ -148,9 +161,7 @@ sudo systemctl restart nginx
 echo ">>> KROK 7: Uruchamianie Certbota dla $DOMAIN..."
 sudo certbot --nginx --non-interactive --agree-tos -m "$SSL_EMAIL" -d "$DOMAIN" --redirect
 
-# ==============================================================================
-# OSTATECZNA POPRAWKA: Wstrzykujemy nasze nagłówki PO tym, jak Certbot skończył pracę.
-# ==============================================================================
+# --- KROK 8: Wstrzykiwanie ostatecznych nagłówków bezpieczeństwa do konfiguracji SSL ---
 echo ">>> KROK 8: Wstrzykiwanie ostatecznych nagłówków bezpieczeństwa do konfiguracji SSL..."
 CONFIG_FILE="/etc/nginx/sites-available/$SERVICE_NAME"
 # Używamy sed do wstawienia linii 'include ...' zaraz po linii 'server_name ...'
@@ -162,7 +173,7 @@ sudo systemctl restart nginx
 
 echo
 echo "----------------------------------------------------"
-echo "✅ WDROŻENIE PANCERNE v3 ZAKOŃCZONE POMYŚLNIE!"
+echo "✅ WDROŻENIE (v4) ZAKOŃCZONE POMYŚLNIE!"
 echo "Twoja strona powinna być dostępna pod adresem: https://$DOMAIN"
-echo "Sprawdź jej ocenę bezpieczeństwa na https://securityheaders.com/ i https://www.ssllabs.com/ssltest/"
+echo "Nowe reguły CSP zostały wdrożone."
 echo "----------------------------------------------------"
