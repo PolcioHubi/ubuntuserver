@@ -714,13 +714,15 @@
                 if (data.success) {
                     currentData.stats = data.stats;
                     currentData.fileUsers = data.users_data.users;
-                    updateStats();
                     updateFileUsersTable();
                 }
 
                 // Załaduj statystyki zarejestrowanych użytkowników
                 await loadRegisteredUsers();
                 await loadAccessKeys();
+
+                // Zaktualizuj statystyki DOPIERO po załadowaniu wszystkich danych
+                updateStats();
 
                 showAlert('Dane zostały odświeżone');
             } catch (error) {

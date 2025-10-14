@@ -83,9 +83,9 @@ def test_delete_nonexistent_user_returns_404(admin_client):
     assert "Użytkownik nie istnieje" in response.json["error"]
 
 @pytest.mark.parametrize("malicious_username,expected_code", [
-    ("..\/", 404),
+    (r"..\\/", 404),  # Raw string dla poprawnego escape
     ("..\\..\\", 400), 
-    ("user\x00.txt", 404)
+    ("user\x00.txt", 400)  # Null byte = Bad Request (400)
 ])
 def test_path_traversal_on_delete_user(admin_client, malicious_username, expected_code):
     """

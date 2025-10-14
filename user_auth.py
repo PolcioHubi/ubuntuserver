@@ -17,6 +17,9 @@ class AuthUser(User, UserMixin):
 
 
 class UserAuthManager:
+    # Security settings
+    BCRYPT_ROUNDS = 12  # Adjust based on performance needs (higher = more secure but slower)
+    
     def __init__(
         self,
         access_key_service: AccessKeyService,
@@ -28,7 +31,7 @@ class UserAuthManager:
         self.hubert_coins_lock = threading.Lock()
 
     def _hash_password(self, password: str) -> str:
-        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=self.BCRYPT_ROUNDS))
         return hashed.decode("utf-8")
 
     def _check_password(self, hashed_password: str, password: str) -> bool:
@@ -55,6 +58,12 @@ class UserAuthManager:
         try:
             username = username.strip()
             logging.info(f"Attempting to register user: {username}")
+            
+            # Validate access key length to prevent DoS
+            if len(access_key) > 256:
+                logging.warning(f"Registration failed for {username}: Access key too long")
+                return False, "Nieprawidłowy klucz dostępu", None
+            
             is_valid, error_msg = self.access_key_service.validate_access_key(
                 access_key
             )

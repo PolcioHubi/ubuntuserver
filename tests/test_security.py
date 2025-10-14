@@ -184,9 +184,9 @@ def test_idor_download_user_data(logged_in_client, registered_user, auth_manager
     [
         ("../", 404, "Resource not found."),
         ("../../", 404, "Resource not found."),
-        ("| ls", 500, "Wystapil blad podczas pobierania logow uzytkownika | ls"),
+        ("| ls", 400, "Nieprawidlowa nazwa uzytkownika"),  # Zmieniono z 500 na 400
         ("& cat /etc/passwd", 404, "Resource not found."),
-        ("user\0.txt", 500, "Wystapil blad podczas pobierania logow uzytkownika user\x00.txt"),
+        ("user\0.txt", 400, "Nieprawidlowa nazwa uzytkownika"),  # Zmieniono z 500 na 400 (null byte = atak)
     ]
 )
 def test_path_traversal_user_logs(admin_client, malicious_username, expected_status_code, expected_error_message):
@@ -206,9 +206,9 @@ def test_path_traversal_user_logs(admin_client, malicious_username, expected_sta
     [
         ("../", 404, "Resource not found."),
         ("../../", 404, "Resource not found."),
-        ("| ls", 404, "Użytkownik nie istnieje"),
+        ("| ls", 400, "Nieprawidlowa nazwa uzytkownika"),  # Zmieniono z 404 na 400
         ("& cat /etc/passwd", 404, "Resource not found."),
-        ("user\0.txt", 404, "Użytkownik nie istnieje"),
+        ("user\0.txt", 400, "Nieprawidlowa nazwa uzytkownika"),  # Zmieniono z 404 na 400 (null byte = atak)
     ]
 )
 def test_path_traversal_download_user_data(admin_client, malicious_username, expected_status_code, expected_error_message):

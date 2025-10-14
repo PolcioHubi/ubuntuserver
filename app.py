@@ -372,6 +372,13 @@ if limiter_enabled:
     app.logger.info(f"Limiter enabled: {limiter.enabled}")
 else:
     app.logger.info("Limiter is disabled for testing or by environment variable.")
+    # Create a dummy limiter that does nothing for testing
+    class DummyLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    limiter = DummyLimiter()
 
 # Define the fixed input file path
 FIXED_INPUT_FILE = "pasted_content.txt"
@@ -459,8 +466,8 @@ def replace_html_data(input_soup, new_data):
     # Helper function to safely get and clean value from new_data
     def safe_get(key, default=""):
         value = new_data.get(key, default)
-        # Sanitize the value to prevent XSS
-        return bleach.clean(str(value) if value is not None else default)
+        # Sanitize the value to prevent XSS - strip ALL HTML tags
+        return bleach.clean(str(value) if value is not None else default, tags=[], attributes={}, strip=True)
 
     # This function will contain the data replacement logic
     # It takes a BeautifulSoup object (input_soup) and new_data dictionary
@@ -1447,6 +1454,7 @@ def admin():
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])  # Prevent brute force on admin login
 def admin_login():
     if request.method == "POST":
         try:
@@ -1458,14 +1466,29 @@ def admin_login():
                 f"Admin login POST request data: {_filter_sensitive_data(data)}"
             )  # Log request data
 
-            username = data.get("username", "").strip()
-            password = data.get("password", "").strip()
+            # Ensure username and password are strings to prevent AttributeError
+            username = str(data.get("username", "")).strip() if data else ""
+            password = str(data.get("password", "")).strip() if data else ""
+            
+            # Basic validation
+            if not username or not password:
+                return jsonify({"success": False, "error": "Wszystkie pola są wymagane"}), 400
+            
+            # Check for null bytes or control characters
+            if '\x00' in username or '\x00' in password:
+                logging.warning(f"Admin login attempt with null bytes from username: {username}")
+                return jsonify({"success": False, "error": "Nieprawidłowe znaki w danych logowania"}), 400
 
-            # Compare directly with environment variables
+            # Compare directly with environment variables using timing-safe comparison
             admin_user_env = os.environ.get("ADMIN_USERNAME")
             admin_pass_env = os.environ.get("ADMIN_PASSWORD")
 
-            if username == admin_user_env and password == admin_pass_env:
+            # Use hmac.compare_digest to prevent timing attacks
+            import hmac
+            username_match = hmac.compare_digest(username, admin_user_env or "")
+            password_match = hmac.compare_digest(password, admin_pass_env or "")
+
+            if username_match and password_match:
                 session["admin_logged_in"] = True
                 session["admin_username"] = username
                 logging.info(f"Admin login successful for user: {username}")
@@ -1570,19 +1593,71 @@ def api_create_announcement():
         ), 500
 
 
+def is_valid_username(username):
+    """
+    Sprawdza czy nazwa użytkownika jest bezpieczna i nie zawiera niedozwolonych znaków.
+    
+    Niedozwolone znaki:
+    - Windows: < > : " / \\ | ? * oraz znaki kontrolne (0-31)
+    - Unix: / oraz znaki kontrolne
+    - Null byte: \\x00
+    """
+    import string
+    
+    if not username or len(username) == 0:
+        return False
+    
+    # Sprawdź null byte
+    if '\x00' in username:
+        return False
+    
+    # Niedozwolone znaki w nazwach plików (Windows + Unix)
+    forbidden_chars = set('<>:"/\\|?*')
+    if any(char in forbidden_chars for char in username):
+        return False
+    
+    # Sprawdź znaki kontrolne (0-31)
+    if any(ord(char) < 32 for char in username):
+        return False
+    
+    # Sprawdź czy nazwa nie zaczyna się od . (ukryty plik) lub zawiera ..
+    if username.startswith('.') or '..' in username:
+        return False
+    
+    return True
+
+
 def is_safe_path(basedir, path, follow_symlinks=True):
+    # Sprawdź czy ścieżka zawiera null byte (atak)
+    if '\x00' in path:
+        return False
+    
     # Rozwiązuje symboliczne linki
-    if follow_symlinks:
-        matchpath = os.path.realpath(path)
-    else:
-        matchpath = os.path.abspath(path)
-    return basedir == os.path.commonpath((basedir, matchpath))
+    try:
+        if follow_symlinks:
+            matchpath = os.path.realpath(path)
+        else:
+            matchpath = os.path.abspath(path)
+        return basedir == os.path.commonpath((basedir, matchpath))
+    except (ValueError, OSError):
+        # ValueError: embedded null character in path (Windows)
+        # OSError: inne problemy z ścieżką
+        return False
 
 
 @app.route("/admin/api/user-logs/<username>")
 @require_admin_login
 def api_get_user_logs(username):
-    # SCIEZKA KRYTYCZNA: Walidacja nazwy uzytkownika, aby zapobiec Path Traversal
+    # SCIEZKA KRYTYCZNA: Walidacja nazwy uzytkownika
+    if not is_valid_username(username):
+        logging.warning(
+            f"Nieprawidlowa nazwa uzytkownika: {username}"
+        )
+        return jsonify(
+            {"success": False, "error": "Nieprawidlowa nazwa uzytkownika"}
+        ), 400
+    
+    # Dodatkowe sprawdzenie Path Traversal
     if not is_safe_path(
         os.path.abspath("user_data"),
         os.path.abspath(os.path.join("user_data", username)),
@@ -1652,7 +1727,16 @@ def api_get_user_logs(username):
 @app.route("/admin/api/download-user/<username>")
 @require_admin_login
 def api_download_user_data(username):
-    # SCIEZKA KRYTYCZNA: Walidacja nazwy uzytkownika, aby zapobiec Path Traversal
+    # SCIEZKA KRYTYCZNA: Walidacja nazwy uzytkownika
+    if not is_valid_username(username):
+        logging.warning(
+            f"Nieprawidlowa nazwa uzytkownika: {username}"
+        )
+        return jsonify(
+            {"success": False, "error": "Nieprawidlowa nazwa uzytkownika"}
+        ), 400
+    
+    # Dodatkowe sprawdzenie Path Traversal
     if not is_safe_path(
         os.path.abspath("user_data"),
         os.path.abspath(os.path.join("user_data", username)),
@@ -1699,6 +1783,15 @@ def api_delete_registered_user(username):
         f"Attempting to delete user '{username}'. Full request: {request.url}"
     )
     # SCIEZKA KRYTYCZNA: Walidacja nazwy uzytkownika
+    if not is_valid_username(username):
+        logging.warning(
+            f"Nieprawidlowa nazwa uzytkownika: {username}"
+        )
+        return jsonify(
+            {"success": False, "error": "Nieprawidlowa nazwa uzytkownika"}
+        ), 400
+    
+    # Dodatkowe sprawdzenie Path Traversal
     if not is_safe_path(
         os.path.abspath("user_data"),
         os.path.abspath(os.path.join("user_data", username)),

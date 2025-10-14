@@ -203,14 +203,22 @@ def logged_in_client(client, registered_user):
 
 
 @pytest.fixture(scope="function")
-def admin_client(client, monkeypatch):
-    """Fixture to get a client that is logged in as an admin and has a valid CSRF token."""
-    # Directly set admin credentials for the test
+def admin_client(client, monkeypatch, app):
+    """Fixture that provides an authenticated admin client."""
     admin_user = "admin_test"
     admin_pass = "password_test"
     monkeypatch.setenv("ADMIN_USERNAME", admin_user)
     monkeypatch.setenv("ADMIN_PASSWORD", admin_pass)
 
+    # Import limiter from app module to reset it
+    try:
+        from app import limiter
+        if hasattr(limiter, '_storage') and hasattr(limiter._storage, 'storage'):
+            # Clear the in-memory storage to reset rate limits
+            limiter._storage.storage.clear()
+    except (ImportError, AttributeError, Exception):
+        pass  # If limiter is not available or is DummyLimiter, just continue
+    
     # First, make a GET request to the admin login page to get a CSRF token in the session
     client.get("/admin/login")
     with client.session_transaction() as sess:
