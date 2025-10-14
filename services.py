@@ -158,7 +158,7 @@ class AnnouncementService:
         return (
             Announcement.query.filter(
                 Announcement.is_active,
-                (Announcement.expires_at.is_(None)) | (Announcement.expires_at > now),
+                (Announcement.expires_at.is_(None)) | (Announcement.expires_at > now),  # type: ignore[attr-defined, operator]
             )
             .order_by(desc(Announcement.created_at))
             .all()
@@ -189,15 +189,16 @@ class StatisticsService:
     def get_user_files(self, username: str) -> List[File]:
         return (
             File.query.filter_by(user_username=username)
-            .order_by(desc(File.modified_at))
+            .order_by(desc(File.modified_at))  # type: ignore[arg-type]
             .all()
         )
 
     def get_all_users_with_stats(self, page=1, per_page=10) -> Dict[str, Any]:
         # Using a subquery to count files and sum sizes for performance
+        # Type ignore: SQLAlchemy column attributes are dynamically generated
         file_stats = (
-            db.session.query(
-                File.user_username,
+            db.session.query(  # type: ignore[call-overload, arg-type]
+                File.user_username,  # type: ignore[arg-type]
                 func.count(File.id).label("file_count"),
                 func.sum(File.size).label("total_size"),
             )
@@ -205,17 +206,25 @@ class StatisticsService:
             .subquery()
         )
 
-        # Left join User with the stats subquery and paginate the result
-        pagination = (
+        # Left join User with the stats subquery
+        query = (
             db.session.query(User, file_stats.c.file_count, file_stats.c.total_size)
             .outerjoin(file_stats, User.username == file_stats.c.user_username)
             .order_by(desc(User.last_login))
-            .paginate(page=page, per_page=per_page, error_out=False)
         )
+        
+        # Manual pagination for compatibility
+        total = query.count()
+        items = query.limit(per_page).offset((page - 1) * per_page).all()
+        
+        # Calculate pagination info
+        total_pages = (total + per_page - 1) // per_page  # Ceiling division
+        has_next = page < total_pages
+        has_prev = page > 1
 
         # Format the results into a list of dictionaries
         users_with_stats = []
-        for user, file_count, total_size in pagination.items:
+        for user, file_count, total_size in items:
             users_with_stats.append(
                 {
                     "name": user.username,
@@ -228,17 +237,19 @@ class StatisticsService:
 
         return {
             "users": users_with_stats,
-            "total_pages": pagination.pages,
-            "current_page": pagination.page,
-            "has_next": pagination.has_next,
-            "has_prev": pagination.has_prev,
+            "total_pages": total_pages,
+            "current_page": page,
+            "has_next": has_next,
+            "has_prev": has_prev,
         }
 
     def get_overall_stats(self) -> Dict:
-        total_users = db.session.query(func.count(User.username)).scalar()
-        total_files, total_size = db.session.query(
+        total_users = db.session.query(func.count(User.username)).scalar()  # type: ignore[arg-type]
+        result = db.session.query(
             func.count(File.id), func.sum(File.size)
         ).first()
+        total_files = result[0] if result else 0
+        total_size = result[1] if result else 0
         return {
             "total_users": total_users or 0,
             "total_files": total_files or 0,

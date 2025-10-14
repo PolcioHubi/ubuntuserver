@@ -301,7 +301,7 @@ def cached_if_not_testing(timeout=None):
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "login"
+login_manager.login_view = "login"  # type: ignore[assignment]
 
 
 @login_manager.user_loader
