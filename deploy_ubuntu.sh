@@ -16,8 +16,8 @@ DEST_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 DOMAIN="gov-mobywatel.polcio.p5.tiktalik.io"
 SSL_EMAIL="polciovps@atomicmail.io"
 GUNICORN_WORKERS=$((2 * $(nproc) + 1))
-# POPRAWKA: Dodano https://cdn.jsdelivr.net do zaufanych źródeł skryptów.
-CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self';"
+# POPRAWKA: Ogólna polityka CSP - zezwala na wszystkie źródła HTTPS dla elastyczności
+CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; manifest-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self';"
 
 
 echo ">>> START: Rozpoczynanie wdrożenia aplikacji $SERVICE_NAME..."
@@ -120,6 +120,13 @@ add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 add_header Content-Security-Policy "$CSP_HEADER" always;
 EOF
 
+# --- KROK 4.6: Zwiększenie limitu rozmiaru przesyłanych plików ---
+echo ">>> KROK 4.6: Konfiguracja limitu rozmiaru plików (client_max_body_size)..."
+sudo tee /etc/nginx/snippets/upload-limits.conf > /dev/null <<EOF
+# Zwiększenie limitu przesyłanych plików do 100MB (dla importu backupów)
+client_max_body_size 100M;
+EOF
+
 # --- KROK 5: Konfiguracja Nginx (WSTĘPNA, tylko HTTP) ---
 echo ">>> KROK 5: Tworzenie WSTĘPNEJ konfiguracji Nginx dla domeny $DOMAIN (tylko port 80)..."
 sudo rm -f /etc/nginx/sites-available/$SERVICE_NAME
@@ -129,6 +136,9 @@ sudo tee /etc/nginx/sites-available/$SERVICE_NAME > /dev/null <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
+    
+    # Zwiększony limit rozmiaru przesyłanych plików
+    include /etc/nginx/snippets/upload-limits.conf;
     
     location / {
         proxy_pass http://unix:$DEST_DIR/${SERVICE_NAME}.sock;
@@ -162,10 +172,14 @@ echo ">>> KROK 7: Uruchamianie Certbota dla $DOMAIN..."
 sudo certbot --nginx --non-interactive --agree-tos -m "$SSL_EMAIL" -d "$DOMAIN" --redirect
 
 # --- KROK 8: Wstrzykiwanie ostatecznych nagłówków bezpieczeństwa do konfiguracji SSL ---
-echo ">>> KROK 8: Wstrzykiwanie ostatecznych nagłówków bezpieczeństwa do konfiguracji SSL..."
+echo ">>> KROK 8: Wstrzykiwanie ostatecznych nagłówków bezpieczeństwa i limitów do konfiguracji SSL..."
 CONFIG_FILE="/etc/nginx/sites-available/$SERVICE_NAME"
 # Używamy sed do wstawienia linii 'include ...' zaraz po linii 'server_name ...'
 sudo sed -i "/server_name $DOMAIN/a include /etc/nginx/snippets/security-headers.conf;" $CONFIG_FILE
+# Dodajemy również limity uploadów, jeśli jeszcze nie są w konfiguracji SSL
+if ! grep -q "upload-limits.conf" "$CONFIG_FILE"; then
+    sudo sed -i "/server_name $DOMAIN/a include /etc/nginx/snippets/upload-limits.conf;" $CONFIG_FILE
+fi
 
 # --- KROK 9: Ostateczny restart Nginx ---
 echo ">>> KROK 9: Ostateczny restart Nginx w celu załadowania pancernych nagłówków..."

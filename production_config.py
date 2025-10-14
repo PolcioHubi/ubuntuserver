@@ -23,7 +23,7 @@ class ProductionConfig:
     SEND_FILE_MAX_AGE_DEFAULT = 31536000  # 1 rok dla plików statycznych
 
     # Upload settings
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max upload
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max upload (dla backupów)
 
     # Logging
     LOG_LEVEL = "INFO"
@@ -85,7 +85,7 @@ class DevelopmentConfig:
     SECRET_KEY = "dev-secret-key-change-in-production"
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max upload for development
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max upload for development (dla backupów)
 
     @staticmethod
     def init_app(app):

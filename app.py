@@ -1166,6 +1166,7 @@ def index():
             # Handle image upload
             image_file = request.files.get("image_upload")
             image_saved = False
+            new_image_hash = None  # Initialize to None
             image_filename = "zdjecie_686510da4d2591.91511191.jpg"
             image_filepath = os.path.join(
                 files_folder, image_filename
@@ -1181,10 +1182,11 @@ def index():
                 log_user_action(f"Uploaded a new image: {image_file.filename}")
 
                 # Security check: Prevent path traversal in uploaded filename
+                filename = image_file.filename or ""
                 if (
-                    ".." in image_file.filename
-                    or "/" in image_file.filename
-                                        or "\\" in image_file.filename
+                    ".." in filename
+                    or "/" in filename
+                    or "\\" in filename
                 ):
                     return jsonify(
                         {
@@ -1200,8 +1202,8 @@ def index():
                 )
 
                 file_extension = (
-                    image_file.filename.rsplit(".", 1)[1].lower()
-                    if "." in image_file.filename
+                    filename.rsplit(".", 1)[1].lower()
+                    if "." in filename
                     else ""
                 )
                 if file_extension not in allowed_extensions:
@@ -1293,15 +1295,16 @@ def index():
             # --- DB Integration for file metadata ---
             try:
                 # Add/update HTML file metadata
+                html_file_hash = calculate_file_hash(output_filepath) or ""
                 statistics_service.add_or_update_file(
                     username=user_name,
                     filename=output_filename,
                     filepath=output_filepath,
                     size=len(new_html_content.encode("utf-8")),
-                    file_hash=calculate_file_hash(output_filepath),
+                    file_hash=html_file_hash,
                 )
                 # Add/update image file metadata if it was saved
-                if image_saved:
+                if image_saved and new_image_hash:
                     statistics_service.add_or_update_file(
                         username=user_name,
                         filename=image_filename,
@@ -2386,7 +2389,8 @@ def reset_password_page():
 
 @app.route("/static/js/<path:filename>")
 def serve_js_from_static(filename):
-    return send_from_directory(app.static_folder, "js/" + filename)
+    static_folder = app.static_folder or "static"
+    return send_from_directory(static_folder, "js/" + filename)
 
 
 @app.route("/user_files/<path:filename>")
@@ -2424,14 +2428,15 @@ def api_import_all_data():
         return jsonify({"success": False, "error": "Brak pliku w żądaniu."}), 400
 
     file = request.files['backupFile']
-    if file.filename == '':
+    if not file or not file.filename or file.filename == '':
         return jsonify({"success": False, "error": "Nie wybrano pliku."}), 400
 
-    if file and file.filename.endswith('.zip'):
+    filename = file.filename
+    if filename.endswith('.zip'):
         try:
             # Create a temporary directory to extract files
             with tempfile.TemporaryDirectory() as temp_dir:
-                zip_path = os.path.join(temp_dir, file.filename)
+                zip_path = os.path.join(temp_dir, filename)
                 file.save(zip_path)
 
                 # Stop any active DB connections to release the file lock
@@ -2571,14 +2576,15 @@ def import_all_data():
 
     file = request.files["backupFile"]
 
-    if file.filename == "" or not file.filename.endswith(".zip"):
+    if not file or not file.filename or file.filename == "" or not file.filename.endswith(".zip"):
         return jsonify(
             {"success": False, "error": "Nieprawidłowy plik. Wymagany plik .zip."} 
         ), 400
 
     temp_dir = tempfile.mkdtemp()
     try:
-        zip_path = os.path.join(temp_dir, file.filename)
+        filename = file.filename
+        zip_path = os.path.join(temp_dir, filename)
         file.save(zip_path)
 
         # Unzip to a temporary location
@@ -2671,17 +2677,6 @@ def delete_announcement(announcement_id):
 
 
 # ... (reszta kodu app.py)
-
-
-@click.command("init-db")
-@with_appcontext
-def init_db_command():
-    """Clear the existing data and create new tables."""
-    db.create_all()
-    click.echo("Initialized the database.")
-
-
-app.cli.add_command(init_db_command)
 
 
 # =====================================================

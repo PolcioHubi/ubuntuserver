@@ -1,7 +1,7 @@
 import logging
 import secrets
 import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from models import db, AccessKey, Announcement, File, Notification, User
 from sqlalchemy import func, desc
 
@@ -193,7 +193,7 @@ class StatisticsService:
             .all()
         )
 
-    def get_all_users_with_stats(self, page=1, per_page=10) -> List[Dict]:
+    def get_all_users_with_stats(self, page=1, per_page=10) -> Dict[str, Any]:
         # Using a subquery to count files and sum sizes for performance
         file_stats = (
             db.session.query(
