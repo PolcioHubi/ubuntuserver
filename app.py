@@ -239,31 +239,6 @@ def periodic_tasks():
     manage_log_directory_size()
 
 
-@app.after_request
-def set_security_headers(response):
-    """Add security headers to all responses"""
-    # Content Security Policy - allow external QR code API
-    response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn-cgi; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob: https://api.qrserver.com; "
-        "font-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-src 'self';"
-    )
-    
-    # Permissions Policy - allow camera for QR scanning
-    response.headers['Permissions-Policy'] = 'camera=(self)'
-    
-    # Other security headers
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    
-    return response
-
-
 # ======================================================
 
 

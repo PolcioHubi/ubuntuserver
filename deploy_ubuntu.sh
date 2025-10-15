@@ -13,11 +13,11 @@ set -e
 SERVICE_NAME="mobywatel"
 PROJECT_USER="mobywatel_user"
 DEST_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-DOMAIN="185-167-99-62.cloud-xip.com"
+DOMAIN="gov-mobywatel.polcio.p5.tiktalik.io"
 SSL_EMAIL="polciovps@atomicmail.io"
 GUNICORN_WORKERS=$((2 * $(nproc) + 1))
-# POPRAWKA: Ogólna polityka CSP - zezwala na wszystkie źródła HTTPS dla elastyczności
-CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; manifest-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self';"
+# POPRAWKA: Polityka CSP dopasowana do potrzeb aplikacji (QR codes, fonty zewnętrzne)
+CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn-cgi; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data:; connect-src 'self'; frame-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self';"
 
 
 echo ">>> START: Rozpoczynanie wdrożenia aplikacji $SERVICE_NAME..."
@@ -114,8 +114,8 @@ add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "SAMEORIGIN" always;
 # Ulepszona polityka Referrer
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-# Blokowanie niechcianych funkcji przeglądarki
-add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+# Blokowanie niechcianych funkcji przeglądarki (zezwolenie na kamerę dla QR)
+add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
 # Polityka bezpieczeństwa treści
 add_header Content-Security-Policy "$CSP_HEADER" always;
 EOF
