@@ -143,15 +143,20 @@ function drawFrame() {
   requestAnimationFrame(drawFrame);
 }
 
+// Sprawdź czy element istnieje przed dodaniem event listenera
+const closeAlertBtn = document.querySelector('button[aria-label="Zamknij alert"]');
+if (closeAlertBtn) {
+  closeAlertBtn.addEventListener('click', function() {
+    this.parentElement.remove();
+  });
+}
 
-
-document.querySelector('button[aria-label="Zamknij alert"]').addEventListener('click', function() {
-  this.parentElement.remove();
-});
-
-document.getElementById('wpiszKodBtn').addEventListener('click', function() {
-  window.location.href = 'govblad/gov_error.html';
-});
+const wpiszKodBtn = document.getElementById('wpiszKodBtn');
+if (wpiszKodBtn) {
+  wpiszKodBtn.addEventListener('click', function() {
+    window.location.href = 'govblad/gov_error.html';
+  });
+}
 
 </script>
 
