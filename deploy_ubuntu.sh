@@ -17,7 +17,8 @@ DOMAIN="185-167-99-62.cloud-xip.com"
 SSL_EMAIL="polciovps@atomicmail.io"
 GUNICORN_WORKERS=$((2 * $(nproc) + 1))
 # POPRAWKA: Polityka CSP dopasowana do potrzeb aplikacji (QR codes, fonty zewnętrzne)
-CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://185-167-99-62.cloud-xip.com/cdn-cgi/; style-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data:; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; manifest-src 'self'; object-src 'none'; base-uri 'self';"
+# WAŻNE: connect-src musi zawierać api.qrserver.com dla Fetch API w Service Worker!
+CSP_HEADER="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://185-167-99-62.cloud-xip.com/cdn-cgi/; style-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data:; connect-src 'self' https://api.qrserver.com https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; manifest-src 'self'; object-src 'none'; base-uri 'self';"
 
 
 echo ">>> START: Rozpoczynanie wdrożenia aplikacji $SERVICE_NAME..."

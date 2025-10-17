@@ -243,13 +243,14 @@ def periodic_tasks():
 def set_security_headers(response):
     """Add security headers including CSP for external QR API"""
     # Content Security Policy - allow QR API and self
+    # CRITICAL: connect-src MUST include api.qrserver.com for Fetch API in Service Worker!
     csp = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https://api.qrserver.com; "
         "font-src 'self' data:; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://api.qrserver.com; "
         "frame-src 'self'; "
         "manifest-src 'self'; "
         "object-src 'none'; "
