@@ -10,6 +10,20 @@
     <title>mObywatel</title>
     <link rel="stylesheet" href="qr.css">
     <link rel="manifest" href="manifest.json">
+    <script>
+        // Register service worker properly
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js', { scope: '/static/' })
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
 
 
 	<link href="css2-1.css" rel="stylesheet">

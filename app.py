@@ -239,6 +239,32 @@ def periodic_tasks():
     manage_log_directory_size()
 
 
+@app.after_request
+def set_security_headers(response):
+    """Add security headers including CSP for external QR API"""
+    # Content Security Policy - allow QR API and self
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https://api.qrserver.com; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-src 'self'; "
+        "manifest-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self';"
+    )
+    response.headers['Content-Security-Policy'] = csp
+    
+    # Other security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
+    return response
+
+
 # ======================================================
 
 

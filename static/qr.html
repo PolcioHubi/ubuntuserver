@@ -9,7 +9,19 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
-    <script src="sw.js" data-cfasync="false"></script>
+    <script>
+        // Register service worker properly
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js', { scope: '/static/' })
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    }, function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
     <meta name="format-detection" content="telephone=no">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <style>
